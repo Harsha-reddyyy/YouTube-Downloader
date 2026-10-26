@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  mediaflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mediaflow-downloader
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - APP_URL=http://localhost:3000
+      - STORAGE_DIR=/app/storage/downloads
+      - STORAGE_TEMP_DIR=/app/storage/temp
+      - FILE_TTL_SECONDS=1800
+      - CLEANUP_INTERVAL_SECONDS=300
+      - MAX_CONCURRENT_JOBS=4
+      - MAX_VIDEO_DURATION_SECONDS=7200
+      - MAX_FILE_SIZE_BYTES=1073741824
+      - RATE_LIMIT_MAX_REQUESTS=60
+      - RATE_LIMIT_WINDOW_SECONDS=60
+      - TOKEN_SECRET=production_secret_token_change_in_real_env_98765
+    volumes:
+      - downloads_data:/app/storage/downloads
+      - temp_data:/app/storage/temp
+    resources:
+      limits:
+        cpus: '4.0'
+        memory: 4096M
+      reservations:
+        cpus: '1.0'
+        memory: 1024M
+
+volumes:
+  downloads_data:
+    driver: local
+  temp_data:
+    driver: local
