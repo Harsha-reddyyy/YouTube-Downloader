@@ -8,7 +8,10 @@ import UrlInputStep from '@/components/UrlInputStep';
 import FormatQualityStep from '@/components/FormatQualityStep';
 import ProcessingStep from '@/components/ProcessingStep';
 import JobHistory from '@/components/JobHistory';
+import TechSpecsSection from '@/components/TechSpecsSection';
+import FaqSection from '@/components/FaqSection';
 import LegalDisclaimerModal from '@/components/LegalDisclaimerModal';
+import SystemStatusModal from '@/components/SystemStatusModal';
 import {
   MediaMetadata,
   MediaFormat,
@@ -17,7 +20,7 @@ import {
   JobCreateResponse,
   JobStatusResponse,
 } from '@/lib/types';
-import { Sparkles, Shield, Zap, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Sparkles, Shield, Zap, CheckCircle2, AlertTriangle, Layers, Film } from 'lucide-react';
 
 export default function HomePage() {
   const [currentStep, setCurrentStep] = useState<StepNumber>(1);
@@ -31,6 +34,8 @@ export default function HomePage() {
 
   const [history, setHistory] = useState<JobState[]>([]);
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+
   const [serverStatus, setServerStatus] = useState<{
     isServerless?: boolean;
     hasYtDlp?: boolean;
@@ -314,42 +319,70 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-between">
+    <div className="min-h-screen flex flex-col justify-between selection:bg-indigo-500/20 selection:text-indigo-600">
       {/* Navigation Header */}
-      <Header onOpenLegal={() => setIsLegalModalOpen(true)} />
+      <Header
+        onOpenLegal={() => setIsLegalModalOpen(true)}
+        onOpenStatus={() => setIsStatusModalOpen(true)}
+        isEngineActive={serverStatus.hasFfmpeg !== false}
+      />
 
       {/* Main App Container */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-14">
         {/* Hero Section */}
-        <div className="text-center space-y-3 mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 shadow-sm">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-            <span>High-Speed Video & Audio Transcoder</span>
+        <div className="text-center space-y-4 mb-10 sm:mb-12">
+          {/* Eyebrow Badge */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-indigo-50/90 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 shadow-sm backdrop-blur-sm">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
+            <span className="font-mono text-[11px] uppercase tracking-wide">Direct Stream Copy Pipeline</span>
+            <span className="w-1 h-1 rounded-full bg-indigo-400 dark:bg-indigo-600" />
+            <span>Zero Re-encoding Loss</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Download Your Media,{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500">
-              Your Way
+          {/* Confident Headline */}
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-[-0.03em] text-slate-900 dark:text-white leading-[1.1]">
+            Studio-Grade Media Extraction.{' '}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-500">
+              Instant. Lossless.
             </span>
           </h1>
 
-          <p className="max-w-xl mx-auto text-sm sm:text-base text-slate-600 dark:text-slate-400">
-            Choose your format and available quality in a few simple steps.
-            Lossless MP4 video and high-bitrate MP3 audio downloads.
+          {/* Subtitle */}
+          <p className="max-w-2xl mx-auto text-sm sm:text-base text-slate-600 dark:text-slate-400 leading-relaxed font-normal">
+            Download authorized YouTube &amp; Shorts videos with bit-for-bit video preservation and high-bitrate MP3 audio. Native H.264 streams optimized for Premiere Pro &amp; DaVinci Resolve.
           </p>
+
+          {/* Capability Badges Bar */}
+          <div className="pt-1 flex flex-wrap items-center justify-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200/70 dark:border-white/5">
+              <Film className="w-3.5 h-3.5 text-indigo-500" />
+              1080p / 4K MP4
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200/70 dark:border-white/5">
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              320kbps MP3 LAME
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200/70 dark:border-white/5">
+              <Layers className="w-3.5 h-3.5 text-emerald-500" />
+              Shorts 9:16 Vertical
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200/70 dark:border-white/5">
+              <Shield className="w-3.5 h-3.5 text-indigo-500" />
+              30m Ephemeral Purge
+            </span>
+          </div>
         </div>
 
-        {/* Serverless Environment Alert Banner */}
+        {/* Serverless Environment Alert Banner (if deployed to Vercel without binaries) */}
         {serverStatus.hasYtDlp === false && (
-          <div className="mb-8 p-4 sm:p-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-sm flex items-start gap-3 shadow-sm">
+          <div className="mb-8 p-4 sm:p-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-xs sm:text-sm flex items-start gap-3 shadow-sm">
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="flex-1">
-              <div className="font-semibold text-amber-800 dark:text-amber-300">
-                Vercel Serverless Hosting Detected
+              <div className="font-bold text-amber-800 dark:text-amber-300">
+                Serverless Environment Detected
               </div>
-              <p className="mt-1 text-slate-600 dark:text-slate-300 text-xs sm:text-sm leading-relaxed">
-                Vercel serverless functions do not include native media binaries (<code className="px-1 py-0.5 rounded bg-amber-500/20 font-mono text-amber-700 dark:text-amber-300">yt-dlp</code> &amp; <code className="px-1 py-0.5 rounded bg-amber-500/20 font-mono text-amber-700 dark:text-amber-300">FFmpeg</code>) or persistent storage. Video inspection works via our fallback engine. For full 1:1 lossless downloads, run locally with <code className="px-1 py-0.5 rounded bg-amber-500/20 font-mono text-amber-700 dark:text-amber-300">npm run dev</code> or deploy using Docker to Railway / Render.
+              <p className="mt-1 text-slate-600 dark:text-slate-300 leading-relaxed">
+                Serverless functions operate with read-only filesystems without native <code className="px-1 py-0.5 rounded bg-amber-500/20 font-mono text-amber-700 dark:text-amber-300">yt-dlp</code> and <code className="px-1 py-0.5 rounded bg-amber-500/20 font-mono text-amber-700 dark:text-amber-300">FFmpeg</code> binaries. Video inspection works via our fallback engine. For lossless stream copy downloads, run locally or deploy using the included Dockerfile.
               </p>
             </div>
           </div>
@@ -396,39 +429,6 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Value Prop Badges */}
-        <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto pt-8 border-t border-slate-200/60 dark:border-slate-800/60 text-center">
-          <div className="flex flex-col items-center p-4 rounded-xl bg-white/40 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/50">
-            <Zap className="w-5 h-5 text-indigo-500 mb-2" />
-            <span className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-white">
-              Hardware-Accelerated FFmpeg
-            </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Lossless video remuxing and LAME audio encoding
-            </span>
-          </div>
-
-          <div className="flex flex-col items-center p-4 rounded-xl bg-white/40 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/50">
-            <CheckCircle2 className="w-5 h-5 text-emerald-500 mb-2" />
-            <span className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-white">
-              Native Stream Detection
-            </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Inspects actual available resolutions: 1080p, 720p, 480p, 360p
-            </span>
-          </div>
-
-          <div className="flex flex-col items-center p-4 rounded-xl bg-white/40 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/50">
-            <Shield className="w-5 h-5 text-indigo-500 mb-2" />
-            <span className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-white">
-              Ephemeral Security
-            </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Auto-purges temporary files and download tokens after 30m
-            </span>
-          </div>
-        </div>
-
         {/* Recent Session History */}
         <JobHistory
           history={history}
@@ -444,15 +444,31 @@ export default function HomePage() {
             }
           }}
         />
+
+        {/* Tech Specs & Architecture Section */}
+        <TechSpecsSection />
+
+        {/* Frequently Asked Questions */}
+        <FaqSection />
       </main>
 
       {/* Footer */}
-      <Footer onOpenLegal={() => setIsLegalModalOpen(true)} />
+      <Footer
+        onOpenLegal={() => setIsLegalModalOpen(true)}
+        onOpenStatus={() => setIsStatusModalOpen(true)}
+      />
 
       {/* Terms and Legal Disclaimer Modal */}
       <LegalDisclaimerModal
         isOpen={isLegalModalOpen}
         onClose={() => setIsLegalModalOpen(false)}
+      />
+
+      {/* System Status Diagnostic Modal */}
+      <SystemStatusModal
+        isOpen={isStatusModalOpen}
+        onClose={() => setIsStatusModalOpen(false)}
+        serverStatus={serverStatus}
       />
     </div>
   );

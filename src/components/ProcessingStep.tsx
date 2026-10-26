@@ -15,7 +15,11 @@ import {
   Loader2,
   Film,
   Music,
+  ArrowRight,
+  ShieldCheck,
+  Radio,
 } from 'lucide-react';
+import Image from 'next/image';
 import { JobState, JobPhase } from '@/lib/types';
 import { formatBytes } from '@/lib/utils';
 
@@ -35,6 +39,7 @@ export default function ProcessingStep({
   isCancelling,
 }: ProcessingStepProps) {
   const [copied, setCopied] = useState(false);
+  const [thumbnailError, setThumbnailError] = useState(false);
 
   const isTerminal =
     job.status === 'ready' || job.status === 'failed' || job.status === 'cancelled';
@@ -48,50 +53,81 @@ export default function ProcessingStep({
     }
   };
 
+  // Determine stage progression for visual pipeline (1 to 4)
+  const getPipelineStage = (phase: JobPhase): number => {
+    switch (phase) {
+      case 'queued':
+      case 'fetching_info':
+        return 1;
+      case 'downloading':
+        return 2;
+      case 'transcoding':
+      case 'finalizing':
+        return 3;
+      case 'ready':
+        return 4;
+      default:
+        return 1;
+    }
+  };
+
+  const currentStage = getPipelineStage(job.status);
+
+  const pipelineStages = [
+    { num: 1, label: 'Manifest Analysis' },
+    { num: 2, label: 'Stream Ingestion' },
+    { num: 3, label: job.format === 'mp3' ? 'FFmpeg Transcode' : 'Direct Stream Copy' },
+    { num: 4, label: 'Asset Ready' },
+  ];
+
   const getPhaseDescription = (phase: JobPhase): string => {
     switch (phase) {
       case 'queued':
-        return 'Waiting in queue for an available processing worker...';
+        return 'Queued in processing pool. Initializing transcode worker...';
       case 'fetching_info':
-        return 'Extracting stream metadata and audio/video manifests...';
+        return 'Extracting stream manifests and decrypting container formats...';
       case 'downloading':
-        return 'Downloading authorized media streams from source...';
+        return 'Downloading authorized media streams from source at maximum speed...';
       case 'transcoding':
         return job.format === 'mp3'
-          ? 'Transcoding audio to high-bitrate MP3 using FFmpeg...'
-          : 'Losslessly muxing native video & audio streams with FFmpeg (0 compression)...';
+          ? 'Transcoding audio track to high-bitrate MP3 using FFmpeg libmp3lame...'
+          : 'Losslessly remuxing native video & audio streams with FFmpeg (0 compression)...';
       case 'finalizing':
-        return 'Verifying stream integrity and preparing download asset...';
+        return 'Finalizing faststart headers and generating cryptographic download token...';
       case 'ready':
-        return 'Processing complete! Your media file is ready for download.';
+        return 'Processing complete! File is verified and ready for instant download.';
       case 'failed':
-        return 'Media processing encountered an error.';
+        return 'Media processing encountered an unexpected issue.';
       case 'cancelled':
-        return 'Job was cancelled.';
+        return 'Job was cancelled by the user.';
       default:
-        return 'Processing media...';
+        return 'Processing media asset...';
     }
   };
 
   return (
     <div className="w-full max-w-3xl mx-auto space-y-6">
-      {/* Central Progress Card */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl shadow-slate-900/5 transition-all">
-        {/* Header / Media Summary */}
-        <div className="flex items-start gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
-          <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-slate-950 flex-shrink-0 shadow-md">
-            {job.thumbnailUrl ? (
-              <img
+      {/* Central Progress & Telemetry Card */}
+      <div className="glass-card rounded-2xl p-6 sm:p-8 space-y-6">
+        {/* Header Summary */}
+        <div className="flex items-start gap-4 pb-6 border-b border-slate-100 dark:border-white/5">
+          <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-slate-950 shrink-0 shadow-md">
+            {!thumbnailError && job.thumbnailUrl ? (
+              <Image
                 src={job.thumbnailUrl}
                 alt={job.mediaTitle}
-                className="w-full h-full object-cover"
+                fill
+                unoptimized
+                sizes="80px"
+                onError={() => setThumbnailError(true)}
+                className="object-cover"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-slate-500">
                 {job.format === 'mp3' ? (
-                  <Music className="w-8 h-8" />
+                  <Music className="w-8 h-8 text-indigo-400" />
                 ) : (
-                  <Film className="w-8 h-8" />
+                  <Film className="w-8 h-8 text-indigo-400" />
                 )}
               </div>
             )}
@@ -99,13 +135,15 @@ export default function ProcessingStep({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                 {job.format.toUpperCase()} • {job.quality}
               </span>
-              <span className="text-xs text-slate-400">• Job #{job.id.slice(0, 8)}</span>
+              <span className="text-xs font-mono text-slate-400 dark:text-slate-500">
+                Job #{job.id.slice(0, 8)}
+              </span>
             </div>
 
-            <h3 className="mt-1.5 text-base sm:text-lg font-bold text-slate-900 dark:text-white line-clamp-1">
+            <h3 className="mt-1.5 text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
               {job.mediaTitle}
             </h3>
 
@@ -115,36 +153,67 @@ export default function ProcessingStep({
           </div>
         </div>
 
-        {/* Status Indicator & Progress Bar */}
-        <div className="py-6 space-y-4">
+        {/* 4-Stage Visual Pipeline Stepper */}
+        {!isTerminal && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-4 gap-2 text-center">
+              {pipelineStages.map((stg) => {
+                const isDone = currentStage > stg.num;
+                const isCurrent = currentStage === stg.num;
+
+                return (
+                  <div key={stg.num} className="flex flex-col items-center">
+                    <div
+                      className={`w-full h-1.5 rounded-full transition-all duration-300 ${
+                        isDone
+                          ? 'bg-emerald-500'
+                          : isCurrent
+                          ? 'bg-indigo-600 animate-pulse'
+                          : 'bg-slate-200 dark:bg-slate-800'
+                      }`}
+                    />
+                    <span
+                      className={`mt-2 text-[10px] sm:text-[11px] font-semibold truncate ${
+                        isDone
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : isCurrent
+                          ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                          : 'text-slate-400 dark:text-slate-500'
+                      }`}
+                    >
+                      {stg.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Status Indicator & Live Shimmering Progress Bar */}
+        <div className="py-2 space-y-3">
           <div className="flex items-center justify-between text-xs sm:text-sm">
-            <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+            <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
               {!isTerminal && (
                 <Loader2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-spin" />
               )}
-              {job.status === 'ready' && (
-                <CheckCircle className="w-4 h-4 text-emerald-500" />
-              )}
-              {job.status === 'failed' && (
-                <AlertCircle className="w-4 h-4 text-red-500" />
-              )}
-              {job.status === 'cancelled' && (
-                <XCircle className="w-4 h-4 text-amber-500" />
-              )}
+              {job.status === 'ready' && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+              {job.status === 'failed' && <AlertCircle className="w-4 h-4 text-red-500" />}
+              {job.status === 'cancelled' && <XCircle className="w-4 h-4 text-amber-500" />}
               <span className="capitalize">{job.status.replace('_', ' ')}</span>
-            </span>
+            </div>
 
-            <span className="font-bold text-indigo-600 dark:text-indigo-400 text-base">
+            <div className="font-mono font-extrabold text-indigo-600 dark:text-indigo-400 text-lg sm:text-xl tabular-nums">
               {Math.round(job.progress.percent || 0)}%
-            </span>
+            </div>
           </div>
 
-          {/* Progress bar line */}
-          <div className="w-full h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden relative">
+          {/* Progress Bar Container */}
+          <div className="w-full h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden relative shadow-inner">
             <div
-              className={`h-full rounded-full transition-all duration-300 ease-out ${
+              className={`h-full rounded-full transition-all duration-300 ease-out relative ${
                 job.status === 'ready'
-                  ? 'bg-emerald-500'
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 shadow-md shadow-emerald-500/20'
                   : job.status === 'failed'
                   ? 'bg-red-500'
                   : job.status === 'cancelled'
@@ -155,53 +224,52 @@ export default function ProcessingStep({
             />
           </div>
 
-          {/* Telemetry info row (Speed, ETA, etc.) */}
+          {/* Telemetry info row (Speed, ETA, Active worker) */}
           {!isTerminal && (
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-slate-500 dark:text-slate-400 font-mono">
               <div className="flex items-center gap-4">
                 {job.progress.downloadSpeed && (
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1.5">
                     <Zap className="w-3.5 h-3.5 text-amber-500" />
-                    Speed: {job.progress.downloadSpeed}
+                    <span>Speed: {job.progress.downloadSpeed}</span>
                   </span>
                 )}
                 {job.progress.eta && (
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                    ETA: {job.progress.eta}
+                    <span>ETA: {job.progress.eta}</span>
                   </span>
                 )}
               </div>
-              <span>Keep this tab open while processing</span>
+              <span className="text-[11px] font-sans">Keep tab open while processing</span>
             </div>
           )}
         </div>
 
-        {/* Phase Action States */}
-
         {/* 1. SUCCESS / READY STATE */}
         {job.status === 'ready' && (
-          <div className="mt-4 p-5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="mt-4 p-5 sm:p-6 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-300">
                     <Check className="w-4 h-4" />
                   </span>
-                  <h4 className="font-bold text-slate-900 dark:text-white">
-                    File Ready for Download!
+                  <h4 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white">
+                    Verified Asset Ready for Download!
                   </h4>
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
                   {job.fileSizeBytes && (
-                    <span className="flex items-center gap-1 font-medium">
+                    <span className="flex items-center gap-1 font-mono font-semibold">
                       <HardDrive className="w-3.5 h-3.5 text-emerald-600" />
                       Size: {formatBytes(job.fileSizeBytes)}
                     </span>
                   )}
                   {job.format === 'mp4' && (
                     <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-semibold text-[11px]">
-                      Exact Native Stream (0 Compression)
+                      Direct Stream Copy (0 Compression)
                     </span>
                   )}
                   <span>• Link expires in 30 minutes</span>
@@ -213,7 +281,7 @@ export default function ProcessingStep({
                 <a
                   href={job.downloadUrl}
                   download={job.fileName || 'media_download'}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-lg shadow-emerald-600/25 transition-all duration-200 text-sm sm:text-base cursor-pointer"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-xl shadow-emerald-600/30 transition-all duration-200 text-sm sm:text-base active:scale-95"
                 >
                   <Download className="w-5 h-5" />
                   <span>Download {job.format.toUpperCase()}</span>
@@ -226,7 +294,7 @@ export default function ProcessingStep({
               )}
             </div>
 
-            {/* Sub-actions (Copy link & Start new) */}
+            {/* Sub-actions: Copy link & Start new */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-emerald-200/50 dark:border-emerald-900/40 text-xs">
               <button
                 type="button"
@@ -236,7 +304,7 @@ export default function ProcessingStep({
                 {copied ? (
                   <>
                     <Check className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>Download Link Copied!</span>
+                    <span>Download Link Copied to Clipboard!</span>
                   </>
                 ) : (
                   <>
@@ -249,17 +317,18 @@ export default function ProcessingStep({
               <button
                 type="button"
                 onClick={onReset}
-                className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+                className="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
               >
                 <span>Convert Another Video</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
         )}
 
-        {/* 2. ACTIVE / PROCESSING STATE */}
+        {/* 2. ACTIVE / PROCESSING STATE CANCEL BUTTON */}
         {!isTerminal && (
-          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-white/5">
             <span className="text-xs text-slate-500 dark:text-slate-400">
               Need to cancel or change format?
             </span>
@@ -268,7 +337,7 @@ export default function ProcessingStep({
               type="button"
               onClick={onCancel}
               disabled={isCancelling}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-lg transition disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl transition disabled:opacity-50 active:scale-95"
             >
               <XCircle className="w-4 h-4" />
               <span>{isCancelling ? 'Cancelling Job...' : 'Cancel Job'}</span>
@@ -280,7 +349,7 @@ export default function ProcessingStep({
         {(job.status === 'failed' || job.status === 'cancelled') && (
           <div className="mt-4 p-5 rounded-2xl bg-red-50/60 dark:bg-red-950/30 border border-red-200 dark:border-red-900/60 space-y-3 animate-in fade-in duration-200">
             <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
               <div>
                 <h4 className="font-bold text-slate-900 dark:text-white text-sm">
                   {job.status === 'cancelled'
@@ -297,7 +366,7 @@ export default function ProcessingStep({
               <button
                 type="button"
                 onClick={onRetry}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-sm transition"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-sm transition active:scale-95"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Retry Job</span>
@@ -306,7 +375,7 @@ export default function ProcessingStep({
               <button
                 type="button"
                 onClick={onReset}
-                className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium text-xs transition"
+                className="px-4 py-2 rounded-xl border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-xs transition active:scale-95"
               >
                 Try Another Video
               </button>

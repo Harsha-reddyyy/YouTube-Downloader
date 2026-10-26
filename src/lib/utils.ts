@@ -58,3 +58,24 @@ export function formatEta(etaStr?: string): string {
   if (!etaStr) return '';
   return etaStr.trim();
 }
+
+/**
+ * Format timestamp into relative time string ("Just now", "2m ago", "1h ago")
+ */
+export function formatRelativeTime(timestamp: number): string {
+  const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+  if (diffSec < 45) return 'Just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
+}
+
+/**
+ * Detect media type from URL (Shorts, Music, Standard)
+ */
+export function detectUrlType(url: string): 'shorts' | 'music' | 'video' {
+  const lower = url.toLowerCase();
+  if (lower.includes('/shorts/')) return 'shorts';
+  if (lower.includes('music.youtube.com')) return 'music';
+  return 'video';
+}
