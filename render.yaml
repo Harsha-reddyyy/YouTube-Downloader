@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: youtube-downloader
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    disk:
+      name: downloader-storage
+      mountPath: /app/storage/downloads
+      sizeGB: 10
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
+      - key: STORAGE_DIR
+        value: /app/storage/downloads
+      - key: STORAGE_TEMP_DIR
+        value: /app/storage/temp
+      - key: TOKEN_SECRET
+        generateValue: true

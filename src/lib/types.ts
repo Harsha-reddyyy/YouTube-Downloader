@@ -100,6 +100,8 @@ export interface JobCreateRequest {
 export interface InspectResponse {
   success: boolean;
   metadata?: MediaMetadata;
+  isServerless?: boolean;
+  serverlessWarning?: string;
   error?: string;
 }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateAndParseYouTubeUrl } from '@/lib/security';
 import { mediaService } from '@/server/media-service';
 import { rateLimiter } from '@/server/rate-limiter';
+import { getServerConfig } from '@/server/config';
 import { InspectResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -61,9 +62,14 @@ export async function POST(req: NextRequest): Promise<NextResponse<InspectRespon
 
   // 4. Inspect media metadata
   try {
+    const config = getServerConfig();
     const metadata = await mediaService.inspectMedia(validation.normalizedUrl);
     return NextResponse.json(
-      { success: true, metadata },
+      {
+        success: true,
+        metadata,
+        isServerless: config.isServerless || !config.ytdlpCommand.isAvailable,
+      },
       {
         headers: {
           'X-RateLimit-Remaining': rateCheck.status.remaining.toString(),
@@ -80,7 +86,10 @@ export async function POST(req: NextRequest): Promise<NextResponse<InspectRespon
       message.includes('not found') ||
       message.includes('private') ||
       message.includes('exceeds maximum allowed limit') ||
-      message.includes('Live streams');
+      message.includes('Live streams') ||
+      message.includes('Serverless') ||
+      message.includes('ENOENT') ||
+      message.includes('yt-dlp');
 
     return NextResponse.json(
       { success: false, error: message },

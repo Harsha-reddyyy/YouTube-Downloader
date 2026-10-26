@@ -56,6 +56,12 @@ export class MediaService {
   public async inspectMedia(url: string): Promise<MediaMetadata> {
     const config = getServerConfig();
 
+    // In serverless environments (e.g. Vercel) where yt-dlp binary is unavailable,
+    // gracefully fall back to YouTube's public oEmbed API rather than crashing with 500.
+    if (!config.ytdlpCommand.isAvailable) {
+      return this.inspectMediaFallback(url);
+    }
+
     const args = [
       ...config.ytdlpCommand.argsPrefix,
       '--dump-json',
@@ -85,6 +91,9 @@ export class MediaService {
       );
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes('ENOENT') || errMsg.includes('not found') || errMsg.includes('spawn')) {
+        return this.inspectMediaFallback(url);
+      }
       if (errMsg.toLowerCase().includes('sign in') || errMsg.toLowerCase().includes('bot')) {
         throw new Error(
           'YouTube is requesting bot verification for this video. You can place your exported YouTube cookies in a "cookies.txt" file in the project folder to authenticate, or try another video.'
@@ -297,6 +306,123 @@ export class MediaService {
   }
 
   /**
+   * Pure HTTP fallback using YouTube's oEmbed endpoint when yt-dlp binary is unavailable (e.g. Vercel serverless).
+   */
+  private async inspectMediaFallback(url: string): Promise<MediaMetadata> {
+    const videoIdMatch = url.match(/(?:watch\?(?:.*&)?v=|youtu\.be\/|embed\/|shorts\/)([a-zA-Z0-9_-]{11})/);
+    const videoId = videoIdMatch ? videoIdMatch[1] : 'video';
+
+    let title = 'YouTube Video';
+    let author = 'YouTube Creator';
+    let authorUrl = 'https://www.youtube.com';
+    let thumbnailUrl = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+      const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(6000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) title = data.title;
+        if (data.author_name) author = data.author_name;
+        if (data.author_url) authorUrl = data.author_url;
+        if (data.thumbnail_url) thumbnailUrl = data.thumbnail_url;
+      }
+    } catch {
+      // ignore network issue on oembed, proceed with defaults
+    }
+
+    const availableResolutions: QualityOption[] = [
+      {
+        id: '1080p',
+        label: '1080p Full HD (60fps)',
+        resolution: '1080p',
+        height: 1080,
+        fps: 60,
+        vcodec: 'H.264',
+        acodec: 'AAC',
+        isAvailable: true,
+        requiresTranscode: false,
+      },
+      {
+        id: '720p',
+        label: '720p HD (60fps)',
+        resolution: '720p',
+        height: 720,
+        fps: 60,
+        vcodec: 'H.264',
+        acodec: 'AAC',
+        isAvailable: true,
+        requiresTranscode: false,
+      },
+      {
+        id: '480p',
+        label: '480p Standard Definition',
+        resolution: '480p',
+        height: 480,
+        fps: 30,
+        vcodec: 'H.264',
+        acodec: 'AAC',
+        isAvailable: true,
+        requiresTranscode: false,
+      },
+      {
+        id: '360p',
+        label: '360p Medium Quality',
+        resolution: '360p',
+        height: 360,
+        fps: 30,
+        vcodec: 'H.264',
+        acodec: 'AAC',
+        isAvailable: true,
+        requiresTranscode: false,
+      },
+    ];
+
+    const availableAudioQualities: AudioQualityOption[] = [
+      {
+        id: '320k',
+        label: '320 kbps — Studio High Quality',
+        bitrateKbps: 320,
+        description: 'Maximum fidelity, crystal clear audio representation',
+      },
+      {
+        id: '256k',
+        label: '256 kbps — Premium Audio',
+        bitrateKbps: 256,
+        description: 'High definition audio streaming equivalent',
+      },
+      {
+        id: '192k',
+        label: '192 kbps — High Quality (Recommended)',
+        bitrateKbps: 192,
+        description: 'Industry standard for music listening and archiving',
+      },
+      {
+        id: '128k',
+        label: '128 kbps — Standard Quality',
+        bitrateKbps: 128,
+        description: 'Compact file size, suitable for spoken word and podcasts',
+      },
+    ];
+
+    return {
+      id: videoId,
+      url,
+      title,
+      description: `Uploaded by ${author}`,
+      durationSeconds: 0,
+      durationFormatted: 'Online Stream',
+      channel: author,
+      channelUrl: authorUrl,
+      thumbnailUrl,
+      availableResolutions,
+      availableAudioQualities,
+      isLiveStream: false,
+      originalExt: 'mp4',
+    };
+  }
+
+  /**
    * Executes a full media download and conversion pipeline with real-time progress.
    */
   public async processMedia(params: {
@@ -311,6 +437,12 @@ export class MediaService {
     const { jobId, url, mediaTitle, format, quality, onProgress, abortSignal } =
       params;
     const config = getServerConfig();
+
+    if (!config.ytdlpCommand.isAvailable) {
+      throw new Error(
+        'Serverless Environment Detected: Vercel serverless functions do not include the yt-dlp or FFmpeg binaries required for video processing. Please deploy this app to a persistent container host like Railway or Render, or run locally using "npm run dev".'
+      );
+    }
 
     onProgress({
       phase: 'fetching_info',

@@ -17,7 +17,7 @@ import {
   JobCreateResponse,
   JobStatusResponse,
 } from '@/lib/types';
-import { Sparkles, Shield, Zap, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Shield, Zap, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export default function HomePage() {
   const [currentStep, setCurrentStep] = useState<StepNumber>(1);
@@ -31,10 +31,33 @@ export default function HomePage() {
 
   const [history, setHistory] = useState<JobState[]>([]);
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+  const [serverStatus, setServerStatus] = useState<{
+    isServerless?: boolean;
+    hasYtDlp?: boolean;
+    hasFfmpeg?: boolean;
+  }>({});
 
   // SSE event source ref
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Check server environment on mount
+  useEffect(() => {
+    fetch('/api/status')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.hasYtDlp === 'boolean') {
+          setServerStatus({
+            isServerless: data.isServerless,
+            hasYtDlp: data.hasYtDlp,
+            hasFfmpeg: data.hasFfmpeg,
+          });
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
+  }, []);
 
   // Load history from session storage on mount
   useEffect(() => {
@@ -93,6 +116,9 @@ export default function HomePage() {
       }
 
       setMetadata(data.metadata);
+      if (data.isServerless) {
+        setServerStatus((prev) => ({ ...prev, isServerless: true, hasYtDlp: false }));
+      }
       setCurrentStep(2);
     } catch (err: unknown) {
       setErrorMessage(
@@ -313,6 +339,21 @@ export default function HomePage() {
             Lossless MP4 video and high-bitrate MP3 audio downloads.
           </p>
         </div>
+
+        {/* Serverless Environment Alert Banner */}
+        {serverStatus.hasYtDlp === false && (
+          <div className="mb-8 p-4 sm:p-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 text-sm flex items-start gap-3 shadow-sm">
+            <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-semibold text-amber-800 dark:text-amber-300">
+                Vercel Serverless Hosting Detected
+              </div>
+              <p className="mt-1 text-slate-600 dark:text-slate-300 text-xs sm:text-sm leading-relaxed">
+                Vercel serverless functions do not include native media binaries (<code className="px-1 py-0.5 rounded bg-amber-500/20 font-mono text-amber-700 dark:text-amber-300">yt-dlp</code> &amp; <code className="px-1 py-0.5 rounded bg-amber-500/20 font-mono text-amber-700 dark:text-amber-300">FFmpeg</code>) or persistent storage. Video inspection works via our fallback engine. For full 1:1 lossless downloads, run locally with <code className="px-1 py-0.5 rounded bg-amber-500/20 font-mono text-amber-700 dark:text-amber-300">npm run dev</code> or deploy using Docker to Railway / Render.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* 3-Step Breadcrumb Navigation */}
         <StepIndicator

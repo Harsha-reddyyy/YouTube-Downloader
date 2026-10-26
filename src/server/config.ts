@@ -19,17 +19,20 @@ export interface ServerConfig {
   ffmpegPath: string;
   ffprobePath: string;
   cookiesPath: string | null;
+  isServerless: boolean;
+  hasFfmpeg: boolean;
   ytdlpCommand: {
     command: string;
     argsPrefix: string[];
+    isAvailable: boolean;
   };
 }
 
 let cachedConfig: ServerConfig | null = null;
 
-function resolveFfmpegPath(): string {
+function resolveFfmpegPath(): { path: string; isAvailable: boolean } {
   if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
-    return process.env.FFMPEG_PATH;
+    return { path: process.env.FFMPEG_PATH, isAvailable: true };
   }
 
   // Common macOS and Linux locations
@@ -41,21 +44,21 @@ function resolveFfmpegPath(): string {
 
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
-      return candidate;
+      return { path: candidate, isAvailable: true };
     }
   }
 
   // Try which ffmpeg
   try {
-    const whichOut = execSync('which ffmpeg', { encoding: 'utf-8' }).trim();
+    const whichOut = execSync('which ffmpeg', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
     if (whichOut && fs.existsSync(whichOut)) {
-      return whichOut;
+      return { path: whichOut, isAvailable: true };
     }
   } catch {
     // ignore
   }
 
-  return 'ffmpeg';
+  return { path: 'ffmpeg', isAvailable: false };
 }
 
 function resolveFfprobePath(ffmpegPath?: string): string {
@@ -85,7 +88,7 @@ function resolveFfprobePath(ffmpegPath?: string): string {
 
   // Try which ffprobe
   try {
-    const whichOut = execSync('which ffprobe', { encoding: 'utf-8' }).trim();
+    const whichOut = execSync('which ffprobe', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
     if (whichOut && fs.existsSync(whichOut)) {
       return whichOut;
     }
@@ -96,16 +99,16 @@ function resolveFfprobePath(ffmpegPath?: string): string {
   return 'ffprobe';
 }
 
-function resolveYtDlpCommand(): { command: string; argsPrefix: string[] } {
+function resolveYtDlpCommand(): { command: string; argsPrefix: string[]; isAvailable: boolean } {
   if (process.env.YTDLP_PATH && fs.existsSync(process.env.YTDLP_PATH)) {
-    return { command: process.env.YTDLP_PATH, argsPrefix: [] };
+    return { command: process.env.YTDLP_PATH, argsPrefix: [], isAvailable: true };
   }
 
   // Check if yt-dlp binary is directly in PATH
   try {
-    const whichOut = execSync('which yt-dlp', { encoding: 'utf-8' }).trim();
+    const whichOut = execSync('which yt-dlp', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
     if (whichOut && fs.existsSync(whichOut)) {
-      return { command: whichOut, argsPrefix: [] };
+      return { command: whichOut, argsPrefix: [], isAvailable: true };
     }
   } catch {
     // not in path
@@ -113,15 +116,20 @@ function resolveYtDlpCommand(): { command: string; argsPrefix: string[] } {
 
   // Check python3 -m yt_dlp
   try {
-    const pythonOut = execSync('which python3', { encoding: 'utf-8' }).trim();
+    const pythonOut = execSync('which python3', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
     if (pythonOut) {
-      return { command: pythonOut, argsPrefix: ['-m', 'yt_dlp'] };
+      try {
+        execSync(`${pythonOut} -m yt_dlp --version`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] });
+        return { command: pythonOut, argsPrefix: ['-m', 'yt_dlp'], isAvailable: true };
+      } catch {
+        // module not installed
+      }
     }
   } catch {
     // ignore
   }
 
-  return { command: 'yt-dlp', argsPrefix: [] };
+  return { command: 'yt-dlp', argsPrefix: [], isAvailable: false };
 }
 
 function resolveCookiesPath(): string | null {
@@ -144,14 +152,24 @@ function resolveCookiesPath(): string | null {
 export function getServerConfig(): ServerConfig {
   if (cachedConfig) return cachedConfig;
 
+  const isServerless = Boolean(
+    process.env.VERCEL ||
+    process.env.VERCEL_ENV ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.LAMBDA_TASK_ROOT
+  );
+
   const cwd = process.cwd();
+  // On serverless environments (Vercel/Lambda), working dir is read-only.
+  // Use /tmp to avoid EROFS (Read-only file system) errors.
+  const baseStorage = isServerless ? '/tmp' : cwd;
   const storageDir = path.resolve(
-    cwd,
-    process.env.STORAGE_DIR || './storage/downloads'
+    baseStorage,
+    process.env.STORAGE_DIR || (isServerless ? 'storage/downloads' : './storage/downloads')
   );
   const storageTempDir = path.resolve(
-    cwd,
-    process.env.STORAGE_TEMP_DIR || './storage/temp'
+    baseStorage,
+    process.env.STORAGE_TEMP_DIR || (isServerless ? 'storage/temp' : './storage/temp')
   );
 
   // Ensure directories exist
@@ -163,7 +181,7 @@ export function getServerConfig(): ServerConfig {
       fs.mkdirSync(storageTempDir, { recursive: true });
     }
   } catch (err) {
-    console.error('Failed to initialize storage directories:', err);
+    console.warn('Storage directory initialization warning:', err);
   }
 
   const fileTtlSeconds = parseInt(process.env.FILE_TTL_SECONDS || '1800', 10);
@@ -171,6 +189,9 @@ export function getServerConfig(): ServerConfig {
     process.env.CLEANUP_INTERVAL_SECONDS || '300',
     10
   );
+
+  const ffmpegRes = resolveFfmpegPath();
+  const ytdlpRes = resolveYtDlpCommand();
 
   cachedConfig = {
     nodeEnv: process.env.NODE_ENV || 'development',
@@ -197,10 +218,12 @@ export function getServerConfig(): ServerConfig {
       parseInt(process.env.RATE_LIMIT_WINDOW_SECONDS || '60', 10) * 1000,
     tokenSecret:
       process.env.TOKEN_SECRET || 'dev_secret_key_antigravity_media_32_chars',
-    ffmpegPath: resolveFfmpegPath(),
-    ffprobePath: resolveFfprobePath(resolveFfmpegPath()),
+    ffmpegPath: ffmpegRes.path,
+    ffprobePath: resolveFfprobePath(ffmpegRes.path),
     cookiesPath: resolveCookiesPath(),
-    ytdlpCommand: resolveYtDlpCommand(),
+    isServerless,
+    hasFfmpeg: ffmpegRes.isAvailable,
+    ytdlpCommand: ytdlpRes,
   };
 
   return cachedConfig;

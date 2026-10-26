@@ -3,6 +3,7 @@ import { validateAndParseYouTubeUrl } from '@/lib/security';
 import { mediaService } from '@/server/media-service';
 import { jobQueue } from '@/server/job-queue';
 import { rateLimiter } from '@/server/rate-limiter';
+import { getServerConfig } from '@/server/config';
 import { JobCreateRequest, JobCreateResponse } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -61,11 +62,24 @@ export async function POST(req: NextRequest): Promise<NextResponse<JobCreateResp
     );
   }
 
-  // 4. Inspect or get title & thumbnail for job representation
+  // 4. Verify system capabilities (Vercel Serverless check)
+  const config = getServerConfig();
+  if (!config.ytdlpCommand.isAvailable) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          'Serverless Hosting Limitation: Vercel does not support background media processing binaries (yt-dlp & FFmpeg). To download full quality media, run locally with "npm run dev" or deploy using Docker to Railway / Render.',
+      },
+      { status: 503 }
+    );
+  }
+
+  // 5. Inspect or get title & thumbnail for job representation
   try {
     const meta = await mediaService.inspectMedia(validation.normalizedUrl);
 
-    // 5. Enqueue in background job queue
+    // 6. Enqueue in background job queue
     const job = jobQueue.enqueue({
       url: validation.normalizedUrl,
       mediaTitle: meta.title,

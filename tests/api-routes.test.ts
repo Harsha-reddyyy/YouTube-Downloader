@@ -4,6 +4,7 @@ import { POST as inspectHandler } from '@/app/api/inspect/route';
 import { POST as createJobHandler } from '@/app/api/jobs/route';
 import { GET as getJobHandler, DELETE as cancelJobHandler } from '@/app/api/jobs/[id]/route';
 import { GET as downloadHandler } from '@/app/api/download/[token]/route';
+import { GET as statusHandler } from '@/app/api/status/route';
 import { rateLimiter } from '@/server/rate-limiter';
 import { storageService } from '@/server/storage-service';
 import { getServerConfig } from '@/server/config';
@@ -98,6 +99,18 @@ describe('API Route Handlers', () => {
       } catch {
         // ignore
       }
+    });
+  });
+
+  describe('GET /api/status', () => {
+    it('returns system capability and environment flags', async () => {
+      const res = await statusHandler();
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.status).toBe('ok');
+      expect(typeof data.isServerless).toBe('boolean');
+      expect(typeof data.hasYtDlp).toBe('boolean');
+      expect(typeof data.hasFfmpeg).toBe('boolean');
     });
   });
 });
