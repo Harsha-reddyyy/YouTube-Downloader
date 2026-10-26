@@ -16,6 +16,9 @@ RUN npm ci
 
 COPY . .
 
+# Ensure public directory exists
+RUN mkdir -p /app/public
+
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
@@ -39,14 +42,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp via pip in system python
-RUN pip3 install --break-system-packages --no-cache-dir yt-dlp
+# Install yt-dlp binary directly
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod a+rx /usr/local/bin/yt-dlp
 
 # Create non-root application user for defense-in-depth security
 RUN groupadd -r appuser && useradd -r -g appuser -d /app appuser
 
-# Create storage directories and set permissions
-RUN mkdir -p /app/storage/downloads /app/storage/temp && \
+# Create storage and public directories and set permissions
+RUN mkdir -p /app/storage/downloads /app/storage/temp /app/public && \
     chown -R appuser:appuser /app
 
 # Copy built artifacts and production dependencies
