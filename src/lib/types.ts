@@ -21,6 +21,8 @@ export interface QualityOption {
   filesizeEstimateBytes?: number;
   isAvailable: boolean;
   requiresTranscode?: boolean;
+  isNleReady?: boolean;
+  codecNote?: string;
 }
 
 export interface AudioQualityOption {

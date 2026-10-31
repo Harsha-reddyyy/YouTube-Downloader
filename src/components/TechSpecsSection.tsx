@@ -5,20 +5,20 @@ import { Cpu, Zap, Shield, Sparkles, Layers, Sliders, CheckCircle2, Video } from
 export default function TechSpecsSection() {
   const specs = [
     {
-      icon: Zap,
-      title: 'Direct Stream Copy Muxing',
-      subtitle: '0% Re-encoding Compression',
+      icon: Video,
+      title: '4K & 2K NLE Mastering (No VP09 Errors)',
+      subtitle: 'Premiere Pro, DaVinci & Final Cut Ready',
       description:
-        'Unlike typical web converters that run heavy lossy re-encoding, MediaFlow extracts native video and audio bitstreams 1:1 and remuxes them directly with FFmpeg. Visual fidelity is 100% byte-for-byte identical to the master source.',
-      badge: 'Zero Loss',
+        'YouTube only delivers 4K (2160p) and 2K (1440p) in VP9 or AV1 codecs, causing "unsupported compression type (vp09)" errors in Premiere Pro. MediaFlow automatically detects VP9/AV1 and masters them into visually lossless H.264 (CRF 17, YUV 4:2:0) with 320kbps AAC, guaranteeing 100% edit-ready compatibility across all NLEs without quality loss.',
+      badge: 'Zero VP09 Error',
     },
     {
-      icon: Video,
-      title: 'Native AVC / H.264 Prioritization',
-      subtitle: 'Premiere Pro & FCP Ready',
+      icon: Zap,
+      title: 'Direct Stream Copy for Native H.264',
+      subtitle: '0% Re-encoding Compression',
       description:
-        'Standard AV1/VP9 codecs often cause import crashes or frame drops in professional NLEs like Premiere Pro and DaVinci Resolve. MediaFlow detects and prioritizes native H.264/AVC streams for immediate drag-and-drop timeline editing.',
-      badge: 'NLE Ready',
+        'When a video is already in native H.264 (e.g. standard 1080p, 720p), MediaFlow preserves bit-for-bit direct stream copy (-c:v copy). No compression is applied, and the original master frames are preserved 1:1 without alteration.',
+      badge: 'Zero Loss',
     },
     {
       icon: Sliders,

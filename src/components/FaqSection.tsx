@@ -18,9 +18,9 @@ export default function FaqSection() {
         'No. Unlike conventional online converters that re-render video using lossy CRF encoding, MediaFlow uses FFmpeg Direct Stream Copy (-c:v copy -c:a copy). The raw video frames and audio packets are copied directly bit-for-bit from source manifests into a standard MP4 container. There is zero compression artifacting, zero generation loss, and processing takes seconds rather than minutes.',
     },
     {
-      question: 'Why do MediaFlow MP4 files import seamlessly into Premiere Pro & DaVinci Resolve?',
+      question: 'Why do other downloaders cause a "vp09 error" in Premiere Pro, and how does MediaFlow fix it?',
       answer:
-        'YouTube often delivers modern 1080p and 4K streams in VP9 or AV1 codecs, which frequently trigger black screens, missing audio, or crash professional NLEs like Adobe Premiere Pro, Final Cut Pro, and DaVinci Resolve. MediaFlow prioritizes native H.264 / AVC streams and audio AAC/MP3 containers, ensuring effortless drag-and-drop timeline editing without transcoding headaches.',
+        'YouTube only delivers 4K (2160p) and 2K (1440p) in VP9 (vp09) or AV1 codecs. Video editing applications like Adobe Premiere Pro, Final Cut Pro, and DaVinci Resolve cannot natively decode VP9 or AV1 inside MP4 files, immediately throwing "The file has an unsupported compression type (vp09)" errors or displaying a black screen. MediaFlow detects when a stream uses VP9/AV1 and automatically masters it into visually lossless H.264 High Profile (CRF 17, YUV 4:2:0) with 320kbps AAC audio. This completely eliminates the vp09 error and makes every 4K and 2K video instantly editable with zero perceptible quality loss.',
     },
     {
       question: 'Can I download vertical YouTube Shorts?',

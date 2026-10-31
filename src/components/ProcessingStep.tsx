@@ -73,10 +73,20 @@ export default function ProcessingStep({
 
   const currentStage = getPipelineStage(job.status);
 
+  const is4kOr2k = job.quality === '2160p' || job.quality === '1440p';
+
   const pipelineStages = [
     { num: 1, label: 'Manifest Analysis' },
     { num: 2, label: 'Stream Ingestion' },
-    { num: 3, label: job.format === 'mp3' ? 'FFmpeg Transcode' : 'Direct Stream Copy' },
+    {
+      num: 3,
+      label:
+        job.format === 'mp3'
+          ? 'FFmpeg Transcode'
+          : is4kOr2k
+          ? 'NLE H.264 Master'
+          : 'NLE Stream Mux',
+    },
     { num: 4, label: 'Asset Ready' },
   ];
 
@@ -85,13 +95,15 @@ export default function ProcessingStep({
       case 'queued':
         return 'Queued in processing pool. Initializing transcode worker...';
       case 'fetching_info':
-        return 'Extracting stream manifests and decrypting container formats...';
+        return 'Extracting stream manifests and resolving video bitrates...';
       case 'downloading':
         return 'Downloading authorized media streams from source at maximum speed...';
       case 'transcoding':
         return job.format === 'mp3'
           ? 'Transcoding audio track to high-bitrate MP3 using FFmpeg libmp3lame...'
-          : 'Losslessly remuxing native video & audio streams with FFmpeg (0 compression)...';
+          : is4kOr2k
+          ? 'Mastering 4K/2K into Premiere Pro & NLE Edit-Friendly H.264 (visually lossless CRF 17, No VP09 error)...'
+          : 'Verifying native H.264 video & audio stream copy for Premiere Pro & NLEs...';
       case 'finalizing':
         return 'Finalizing faststart headers and generating cryptographic download token...';
       case 'ready':
@@ -269,7 +281,9 @@ export default function ProcessingStep({
                   )}
                   {job.format === 'mp4' && (
                     <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-semibold text-[11px]">
-                      Direct Stream Copy (0 Compression)
+                      {is4kOr2k
+                        ? 'Premiere Pro & NLE Ready • No VP09 Error (H.264 Master)'
+                        : 'Premiere Pro & NLE Ready • Direct Stream Copy'}
                     </span>
                   )}
                   <span>• Link expires in 30 minutes</span>

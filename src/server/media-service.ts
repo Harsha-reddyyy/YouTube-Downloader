@@ -32,6 +32,24 @@ export interface YtDlpRawFormat {
   abr?: number;
 }
 
+export interface MediaProbeResult {
+  videoStream?: {
+    codecName: string;
+    codecTagString?: string;
+    pixFmt?: string;
+    profile?: string;
+    width?: number;
+    height?: number;
+  };
+  audioStream?: {
+    codecName: string;
+    channels?: number;
+    bitrate?: number;
+  };
+  durationSeconds?: number;
+  formatName?: string;
+}
+
 export interface YtDlpDumpJson {
   id: string;
   title: string;
@@ -241,17 +259,24 @@ export class MediaService {
           filesizeEstimateBytes += Math.round((128 * 1000 * durationSeconds) / 8);
         }
 
+        const isNativeH264 = match?.vcodec?.toLowerCase().startsWith('avc') ?? false;
+        const codecNote = isNativeH264
+          ? 'Native H.264 Direct Stream Copy (0 Compression)'
+          : 'Premiere Pro & NLE Ready • Mastered to Visually Lossless H.264 (CRF 17, No VP09 Error)';
+
         return {
           id: spec.res,
           label: spec.label,
           resolution: spec.res,
           height: spec.targetHeight,
           fps: match?.fps || 30,
-          vcodec: 'H.264',
+          vcodec: 'H.264 (NLE Ready)',
           acodec: 'AAC',
           filesizeEstimateBytes,
           isAvailable,
-          requiresTranscode: !isAvailable,
+          requiresTranscode: !isNativeH264,
+          isNleReady: true,
+          codecNote,
         };
       });
   }
@@ -333,15 +358,43 @@ export class MediaService {
 
     const availableResolutions: QualityOption[] = [
       {
+        id: '2160p',
+        label: '4K Ultra HD (60fps)',
+        resolution: '2160p',
+        height: 2160,
+        fps: 60,
+        vcodec: 'H.264 (NLE Ready)',
+        acodec: 'AAC',
+        isAvailable: true,
+        requiresTranscode: true,
+        isNleReady: true,
+        codecNote: 'Premiere Pro & NLE Ready • Mastered to Visually Lossless H.264 (CRF 17, No VP09 Error)',
+      },
+      {
+        id: '1440p',
+        label: '2K Quad HD (60fps)',
+        resolution: '1440p',
+        height: 1440,
+        fps: 60,
+        vcodec: 'H.264 (NLE Ready)',
+        acodec: 'AAC',
+        isAvailable: true,
+        requiresTranscode: true,
+        isNleReady: true,
+        codecNote: 'Premiere Pro & NLE Ready • Mastered to Visually Lossless H.264 (CRF 17, No VP09 Error)',
+      },
+      {
         id: '1080p',
         label: '1080p Full HD (60fps)',
         resolution: '1080p',
         height: 1080,
         fps: 60,
-        vcodec: 'H.264',
+        vcodec: 'H.264 (NLE Ready)',
         acodec: 'AAC',
         isAvailable: true,
         requiresTranscode: false,
+        isNleReady: true,
+        codecNote: 'Native H.264 Direct Stream Copy (0 Compression)',
       },
       {
         id: '720p',
@@ -349,10 +402,12 @@ export class MediaService {
         resolution: '720p',
         height: 720,
         fps: 60,
-        vcodec: 'H.264',
+        vcodec: 'H.264 (NLE Ready)',
         acodec: 'AAC',
         isAvailable: true,
         requiresTranscode: false,
+        isNleReady: true,
+        codecNote: 'Native H.264 Direct Stream Copy (0 Compression)',
       },
       {
         id: '480p',
@@ -653,12 +708,24 @@ export class MediaService {
       }
 
       const generatedFilePath = path.join(tempOutputDir, outputFilename);
-      const ext = path.extname(outputFilename).replace('.', '') || format;
-      const cleanFileName = sanitizeFilename(mediaTitle, quality, ext);
+      const targetExtension = format === 'mp3' ? 'mp3' : 'mp4';
+      const cleanFileName = sanitizeFilename(mediaTitle, quality, targetExtension);
       const finalDestPath = path.join(config.storageDir, `${jobId}_${cleanFileName}`);
 
-      // Move completed file directly to storageDir (1:1 exact native stream copy, zero compression)
-      fs.renameSync(generatedFilePath, finalDestPath);
+      if (format === 'mp4') {
+        // Guarantee 100% Premiere Pro, DaVinci Resolve & FCPX compatibility.
+        // Direct stream copy for native H.264 (0 compression), and visually lossless H.264
+        // mastering for 4K/2K VP9/AV1 streams (CRF 17) to eliminate the "vp09 error".
+        await this.ensureNleCompatibleMp4({
+          downloadedFilePath: generatedFilePath,
+          finalDestPath,
+          onProgress,
+          abortSignal,
+        });
+      } else {
+        // Audio extraction mode (MP3 LAME CBR)
+        fs.renameSync(generatedFilePath, finalDestPath);
+      }
 
       // Clean up temp job directory
       try {
@@ -751,6 +818,298 @@ export class MediaService {
         }
       });
     });
+  }
+
+  /**
+   * Probes a media file using ffprobe to extract video/audio codec, pixel format, and duration.
+   */
+  public async probeMedia(filePath: string): Promise<MediaProbeResult> {
+    const config = getServerConfig();
+    const ffprobeBin = config.ffprobePath || 'ffprobe';
+
+    return new Promise((resolve) => {
+      const child = spawn(
+        ffprobeBin,
+        ['-v', 'quiet', '-print_format', 'json', '-show_streams', '-show_format', filePath],
+        { shell: false }
+      );
+
+      let stdout = '';
+      child.stdout?.on('data', (d: Buffer) => {
+        stdout += d.toString('utf-8');
+      });
+
+      child.on('error', () => {
+        resolve({});
+      });
+
+      child.on('close', (code) => {
+        if (code !== 0 || !stdout.trim()) {
+          return resolve({});
+        }
+
+        try {
+          const data = JSON.parse(stdout);
+          const streams: Array<Record<string, unknown>> = data.streams || [];
+          const video = streams.find((s) => s.codec_type === 'video');
+          const audio = streams.find((s) => s.codec_type === 'audio');
+
+          const durationSec =
+            parseFloat(String(data.format?.duration || '')) ||
+            parseFloat(String(video?.duration || '')) ||
+            parseFloat(String(audio?.duration || '')) ||
+            undefined;
+
+          resolve({
+            videoStream: video
+              ? {
+                  codecName: String(video.codec_name || '').toLowerCase(),
+                  codecTagString: String(video.codec_tag_string || '').toLowerCase(),
+                  pixFmt: String(video.pix_fmt || '').toLowerCase(),
+                  profile: String(video.profile || ''),
+                  width: Number(video.width) || undefined,
+                  height: Number(video.height) || undefined,
+                }
+              : undefined,
+            audioStream: audio
+              ? {
+                  codecName: String(audio.codec_name || '').toLowerCase(),
+                  channels: Number(audio.channels) || undefined,
+                  bitrate: Number(audio.bit_rate) || undefined,
+                }
+              : undefined,
+            durationSeconds: durationSec,
+            formatName: String(data.format?.format_name || ''),
+          });
+        } catch {
+          resolve({});
+        }
+      });
+    });
+  }
+
+  /**
+   * Executes an FFmpeg command with progress tracking and abortSignal cancellation.
+   */
+  public async executeFfmpegWithProgress(params: {
+    args: string[];
+    durationSeconds?: number;
+    onProgress?: (progressRatio: number) => void;
+    abortSignal?: AbortSignal;
+  }): Promise<void> {
+    const { args, durationSeconds = 0, onProgress, abortSignal } = params;
+    const config = getServerConfig();
+
+    return new Promise<void>((resolve, reject) => {
+      if (abortSignal?.aborted) {
+        return reject(new Error('Job was cancelled by the user.'));
+      }
+
+      const child = spawn(config.ffmpegPath, args, { shell: false });
+
+      const onAbort = () => {
+        if (child && !child.killed) {
+          try {
+            child.kill('SIGTERM');
+            setTimeout(() => {
+              if (child && !child.killed) child.kill('SIGKILL');
+            }, 2000);
+          } catch {
+            // ignore
+          }
+        }
+        reject(new Error('Job was cancelled by the user.'));
+      };
+
+      if (abortSignal) {
+        abortSignal.addEventListener('abort', onAbort, { once: true });
+      }
+
+      let stderrBuffer = '';
+      let stdoutBuffer = '';
+
+      child.stdout?.on('data', (data: Buffer) => {
+        stdoutBuffer += data.toString('utf-8');
+        const lines = stdoutBuffer.split(/\r?\n/);
+        stdoutBuffer = lines.pop() || ''; // retain uncompleted line chunk
+
+        for (const line of lines) {
+          if (line.startsWith('out_time_us=')) {
+            const us = parseInt(line.substring(12), 10);
+            if (!isNaN(us) && durationSeconds > 0 && onProgress) {
+              const currentSec = us / 1000000;
+              const ratio = Math.min(1, Math.max(0, currentSec / durationSeconds));
+              onProgress(ratio);
+            }
+          }
+        }
+      });
+
+      child.stderr?.on('data', (data: Buffer) => {
+        stderrBuffer += data.toString('utf-8');
+        if (stderrBuffer.length > 8000) {
+          stderrBuffer = stderrBuffer.slice(-8000);
+        }
+      });
+
+      child.on('error', (err) => {
+        if (abortSignal) abortSignal.removeEventListener('abort', onAbort);
+        reject(new Error(`Failed to execute FFmpeg: ${err.message}`));
+      });
+
+      child.on('close', (code) => {
+        if (abortSignal) abortSignal.removeEventListener('abort', onAbort);
+        if (code === 0) {
+          resolve();
+        } else {
+          const errSnippet = stderrBuffer
+            .split('\n')
+            .filter((l) => l.trim().length > 0 && !l.includes('WARNING'))
+            .slice(-3)
+            .join(' ');
+          reject(new Error(errSnippet || `FFmpeg process exited with code ${code}.`));
+        }
+      });
+    });
+  }
+
+  /**
+   * Ensures the resulting MP4 video is 100% edit-friendly in Adobe Premiere Pro, Final Cut Pro,
+   * DaVinci Resolve, CapCut, and any other NLE software.
+   *
+   * If the video already uses native H.264 (AVC) and AAC, it retains exact 1:1 stream copy (0 compression).
+   * If the video uses VP9 (vp09), AV1 (av01), or non-standard pixel format, it is mastered
+   * into visually lossless H.264 (CRF 17, YUV 4:2:0) with 320kbps AAC, eliminating the "vp09 error".
+   */
+  private async ensureNleCompatibleMp4(params: {
+    downloadedFilePath: string;
+    finalDestPath: string;
+    onProgress: (progress: JobProgress) => void;
+    abortSignal?: AbortSignal;
+  }): Promise<void> {
+    const { downloadedFilePath, finalDestPath, onProgress, abortSignal } = params;
+
+    const probe = await this.probeMedia(downloadedFilePath);
+    const video = probe.videoStream;
+    const audio = probe.audioStream;
+
+    // Premiere Pro and other NLEs strictly require H.264 (avc1) in yuv420p for MP4.
+    // If the video is VP9 (vp09) or AV1 (av01), Premiere Pro rejects it with:
+    // "The file has an unsupported compression type (vp09)".
+    const isVideoH264 = video?.codecName === 'h264' && (!video.pixFmt || video.pixFmt === 'yuv420p');
+    const isAudioAac = !audio || audio.codecName === 'aac' || audio.codecName === 'mp3';
+    const isMp4Ext = path.extname(downloadedFilePath).toLowerCase() === '.mp4';
+
+    // Case 1: Already native H.264 + AAC in MP4 container -> Direct Stream Copy (0 compression)
+    if (isVideoH264 && isAudioAac && isMp4Ext) {
+      onProgress({
+        phase: 'finalizing',
+        percent: 98,
+        message: 'Verified native H.264 stream. Direct stream copy (0 compression)...',
+      });
+      fs.renameSync(downloadedFilePath, finalDestPath);
+      return;
+    }
+
+    // Case 2: Video is already native H.264, but audio is Opus/WebM
+    // Remux audio to AAC 320k while copying video frames 100% bit-for-bit (0 video compression)
+    if (isVideoH264) {
+      onProgress({
+        phase: 'transcoding',
+        percent: 95,
+        message: 'Preserving native H.264 video • Remuxing audio to 320kbps AAC for NLE compatibility...',
+      });
+
+      await this.executeFfmpegWithProgress({
+        args: [
+          '-y',
+          '-i',
+          downloadedFilePath,
+          '-c:v',
+          'copy',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '320k',
+          '-movflags',
+          '+faststart',
+          finalDestPath,
+        ],
+        abortSignal,
+      });
+
+      try {
+        if (fs.existsSync(downloadedFilePath)) fs.unlinkSync(downloadedFilePath);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    // Case 3: Video is VP9 (vp09), AV1 (av01), or non-H.264 (Standard for all 4K & 2K streams)
+    // Master into Visually Lossless H.264 (CRF 17, High Profile 5.2, YUV 4:2:0) with 320kbps AAC.
+    // Completely eliminates the "vp09 error" in Premiere Pro, DaVinci Resolve, and Final Cut Pro.
+    onProgress({
+      phase: 'transcoding',
+      percent: 90,
+      message: 'Mastering 4K/2K into Premiere Pro & NLE Edit-Friendly H.264 (visually lossless CRF 17)...',
+    });
+
+    const ffmpegArgs = [
+      '-y',
+      '-i',
+      downloadedFilePath,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '17', // Visually lossless master quality - 0 perceptible compression
+      '-profile:v',
+      'high',
+      '-level',
+      '5.2', // Supports up to 4K 60fps
+      '-pix_fmt',
+      'yuv420p', // Universal 8-bit YUV 4:2:0 - guaranteed to work in all editing software
+      '-c:a',
+      'aac',
+      '-b:a',
+      '320k', // Broadcast quality stereo AAC
+      '-movflags',
+      '+faststart',
+      '-progress',
+      'pipe:1',
+      finalDestPath,
+    ];
+
+    try {
+      await this.executeFfmpegWithProgress({
+        args: ffmpegArgs,
+        durationSeconds: probe.durationSeconds,
+        onProgress: (ratio) => {
+          const percent = Math.min(98, Math.max(90, Math.round(90 + ratio * 8)));
+          onProgress({
+            phase: 'transcoding',
+            percent,
+            message: `Mastering 4K/2K into Premiere Pro & NLE Edit-Friendly H.264 (${percent}%)...`,
+          });
+        },
+        abortSignal,
+      });
+
+      try {
+        if (fs.existsSync(downloadedFilePath)) fs.unlinkSync(downloadedFilePath);
+      } catch {
+        // ignore
+      }
+    } catch (err) {
+      try {
+        if (fs.existsSync(finalDestPath)) fs.unlinkSync(finalDestPath);
+      } catch {
+        // ignore
+      }
+      throw err;
+    }
   }
 }
 

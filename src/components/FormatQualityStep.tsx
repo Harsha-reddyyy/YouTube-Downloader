@@ -148,7 +148,7 @@ export default function FormatQualityStep({
             {/* Direct stream copy guarantee */}
             <div className="mt-4 inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/60 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
               <ShieldCheck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-              <span>Native Stream Copy Muxing • 0% Quality Loss Guarantee</span>
+              <span>100% NLE Edit-Friendly (Premiere Pro, DaVinci, FCPX) • Zero VP09 Error Guarantee</span>
             </div>
           </div>
         </div>
@@ -288,7 +288,7 @@ export default function FormatQualityStep({
                   <div className="mt-2.5 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                     <span className="font-mono text-[11px]">
                       {opt.fps ? `${opt.fps}fps • ` : ''}
-                      {opt.vcodec ? opt.vcodec.split('.')[0] : 'H.264'}
+                      {opt.vcodec || 'H.264'}
                     </span>
                     <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
                       {opt.filesizeEstimateBytes
@@ -297,10 +297,17 @@ export default function FormatQualityStep({
                     </span>
                   </div>
 
+                  {(opt.resolution === '2160p' || opt.resolution === '1440p') && (
+                    <div className="mt-2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span>Premiere Pro &amp; NLE Ready • No VP09 Error (H.264 Master)</span>
+                    </div>
+                  )}
+
                   {opt.resolution === '1080p' && (
                     <div className="mt-2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      <span>Recommended for Editing (Premiere / FCP)</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span>Native Direct Stream Copy • Premiere Pro &amp; FCP Ready</span>
                     </div>
                   )}
                 </button>
@@ -365,13 +372,13 @@ export default function FormatQualityStep({
           <div className="space-y-1">
             <div className="font-bold text-slate-900 dark:text-white">
               {selectedFormat === 'mp4'
-                ? 'Zero-Compression Direct Stream Copy'
+                ? '100% NLE Edit-Friendly Pipeline (Zero VP09 Codec Errors)'
                 : 'FFmpeg Libmp3lame Audio Pipeline'}
             </div>
             <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
               {selectedFormat === 'mp4'
-                ? 'Original video and audio streams are extracted directly from source without re-encoding. Video frames and timestamps are muxed into an MP4 container at native bitrates, guaranteeing 100% preservation of color grading and sharp details.'
-                : 'Audio is extracted directly from the highest-bitrate source manifest and mastered using FFmpeg libmp3lame constant bitrate (CBR) encoding with faststart MP3 header headers for seamless playback.'}
+                ? 'YouTube serves 4K and 2K exclusively in VP9/AV1 codecs which cause "unsupported compression type (vp09)" errors in Adobe Premiere Pro and DaVinci Resolve. MediaFlow automatically masters 4K & 2K into visually lossless H.264 High Profile (CRF 17, YUV 4:2:0) with 320kbps AAC, making every video instantly editable without quality loss. 1080p/720p streams with native H.264 retain 1:1 direct stream copy (0 re-compression).'
+                : 'Audio is extracted directly from the highest-bitrate source manifest and mastered using FFmpeg libmp3lame constant bitrate (CBR) encoding with faststart MP3 headers for seamless playback.'}
             </p>
           </div>
         </div>
